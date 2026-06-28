@@ -2,6 +2,8 @@
 
 Nexus Events is a full-stack, industry-standard event management and booking platform. It features a premium, responsive frontend built with Vanilla HTML/CSS/JS and a robust RESTful API backend built with Flask, SQLAlchemy, and JWT authentication.
 
+<img width="1920" height="1724" alt="image" src="https://github.com/user-attachments/assets/b7b337dd-b0cb-48c5-8281-75dbbde26fe0" />
+
 ## Features
 
 * **Premium UI/UX**: Dark theme with glassmorphism effects, CSS grid layouts, smooth transitions, and responsive design.
