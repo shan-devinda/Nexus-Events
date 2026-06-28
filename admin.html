@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Nexus Events</title>
+    <meta name="description" content="Manage events and bookings for Nexus Events.">
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <!-- HEADER -->
+    <header>
+        <a href="index.html" class="logo">⚡ Nexus Events</a>
+        <div class="nav-center">
+            <nav>
+                <a href="index.html">Back to Site</a>
+                <a href="dashboard.html">My Tickets</a>
+            </nav>
+        </div>
+        <div class="nav-right" id="nav-right"></div>
+    </header>
+
+    <main id="admin-main">
+        <div style="display:flex; justify-content:center; padding:4rem;">
+            <div class="loader loader-lg"></div>
+        </div>
+    </main>
+
+    <script src="scripts/data.js"></script>
+    <script src="scripts/app.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        renderNav();
+
+        const user = getCurrentUser();
+        const main = document.getElementById('admin-main');
+
+        if (!user || !user.is_admin) {
+            main.innerHTML = `
+                <div class="empty-state" style="margin-top:4rem;">
+                    <div style="font-size:3rem;margin-bottom:1rem;">🔒</div>
+                    <h2>403 — Access Denied</h2>
+                    <p>You need an admin account to access this page.</p>
+                    <a href="index.html" class="btn btn-primary" style="margin-top:1.5rem;">Go to Catalog</a>
+                </div>
+            `;
+            return;
+        }
+
+        renderAdminDashboard(main);
+    });
+
+
+    // =====================================================================
+    // RENDER ADMIN DASHBOARD
+    // =====================================================================
+    function renderAdminDashboard(container) {
+        container.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; flex-wrap:wrap; gap:1rem;">
+                <h1 style="font-size:2rem;">Admin Dashboard</h1>
+                <span style="color:var(--text-muted); font-size:0.85rem;">Logged in as Admin</span>
+            </div>
+
+            <div class="admin-layout">
+                <!-- Sidebar: Create Event Form -->
+                <div class="admin-sidebar">
+                    <h3 style="margin-bottom:1.5rem; padding-bottom:0.75rem; border-bottom:1px solid var(--border-color);">
+                        Create New Event
+                    </h3>
+                    <form id="create-event-form" onsubmit="handleCreateEvent(event)">
+                        <div class="form-group">
+                            <label>Event ID <span style="color:var(--text-muted); font-weight:400;">(e.g., evt-007)</span></label>
+                            <input type="text" id="ev-id" class="form-input" placeholder="evt-007" required pattern="[a-z0-9\\-]+">
+                        </div>
+                        <div class="form-group">
+                            <label>Title</label>
+                            <input type="text" id="ev-title" class="form-input" placeholder="Event name" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Category</label>
+                            <select id="ev-category" class="form-input" required>
+                                <option value="">Select category...</option>
+                                <option value="Conference">Conference</option>
+                                <option value="Festival">Festival</option>
+                                <option value="Workshop">Workshop</option>
+                                <option value="Exhibition">Exhibition</option>
+                                <option value="General">General</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="date" id="ev-date" class="form-input" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Time</label>
+                            <input type="text" id="ev-time" class="form-input" placeholder="09:00 AM" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Location</label>
+                            <input type="text" id="ev-loc" class="form-input" placeholder="Venue, City" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Price (USD)</label>
+                            <input type="number" id="ev-price" class="form-input" step="0.01" min="0" placeholder="99.00" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Total Tickets</label>
+                            <input type="number" id="ev-tickets" class="form-input" min="1" placeholder="500" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Image URL <span style="color:var(--text-muted); font-weight:400;">(optional)</span></label>
+                            <input type="url" id="ev-image" class="form-input" placeholder="https://...">
+                        </div>
+                        <div class="form-group">
+                            <label>Description</label>
+                            <textarea id="ev-desc" class="form-input" rows="4" placeholder="Describe your event..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full" id="create-btn">
+                            <span class="btn-text">Create Event</span>
+                            <div class="loader btn-loader" style="display:none;"></div>
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Main panel: Tabs for Events & Bookings -->
+                <div class="admin-panel">
+                    <!-- Stats -->
+                    <div class="admin-stats" id="admin-stats">
+                        <div class="admin-stat">
+                            <div class="admin-stat-num" id="stat-events">—</div>
+                            <div class="admin-stat-label">Total Events</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-num" id="stat-bookings">—</div>
+                            <div class="admin-stat-label">Total Bookings</div>
+                        </div>
+                        <div class="admin-stat">
+                            <div class="admin-stat-num" id="stat-revenue">—</div>
+                            <div class="admin-stat-label">Revenue</div>
+                        </div>
+                    </div>
+
+                    <!-- Tabs -->
+                    <div class="admin-tabs">
+                        <button class="admin-tab-btn active" onclick="switchAdminTab('events', this)">Events</button>
+                        <button class="admin-tab-btn" onclick="switchAdminTab('bookings', this)">All Bookings</button>
+                    </div>
+
+                    <!-- Events Tab -->
+                    <div class="admin-tab-content active" id="admin-tab-events">
+                        <div class="admin-panel-body">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Event</th>
+                                        <th>Category</th>
+                                        <th>Date</th>
+                                        <th>Price</th>
+                                        <th>Sold / Total</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-events-tbody">
+                                    <tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">
+                                        <div class="loader" style="display:inline-block; margin-right:0.5rem;"></div>Loading...
+                                    </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Bookings Tab -->
+                    <div class="admin-tab-content" id="admin-tab-bookings">
+                        <div class="admin-panel-body">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Booking ID</th>
+                                        <th>Event</th>
+                                        <th>Customer</th>
+                                        <th>Qty</th>
+                                        <th>Total Paid</th>
+                                        <th>Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-bookings-tbody">
+                                    <tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">
+                                        <div class="loader" style="display:inline-block; margin-right:0.5rem;"></div>Loading...
+                                    </td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        loadAdminData();
+    }
+
+
+    // =====================================================================
+    // TAB SWITCHING
+    // =====================================================================
+    function switchAdminTab(tabName, btn) {
+        document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.admin-tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(`admin-tab-${tabName}`)?.classList.add('active');
+    }
+
+
+    // =====================================================================
+    // LOAD ADMIN DATA
+    // =====================================================================
+    async function loadAdminData() {
+        const [events, bookings] = await Promise.all([
+            getEvents(),
+            getAllBookings()
+        ]);
+
+        // Stats
+        const totalRevenue = bookings.reduce((sum, b) => sum + (b.totalPaid || 0), 0);
+        document.getElementById('stat-events').textContent   = events.length;
+        document.getElementById('stat-bookings').textContent = bookings.length;
+        document.getElementById('stat-revenue').textContent  = formatCurrency(totalRevenue);
+
+        renderEventsTable(events);
+        renderBookingsTable(bookings);
+    }
+
+    function renderEventsTable(events) {
+        const tbody = document.getElementById('admin-events-tbody');
+        if (!events.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">No events yet. Create one!</td></tr>';
+            return;
+        }
+        tbody.innerHTML = events.map(e => {
+            const pct = e.totalTickets > 0 ? Math.round((e.soldTickets / e.totalTickets) * 100) : 0;
+            return `
+                <tr>
+                    <td>
+                        <div style="font-weight:600; max-width:200px;">${e.title}</div>
+                        <div style="font-size:0.75rem; color:var(--text-muted); font-family:monospace;">${e.id}</div>
+                    </td>
+                    <td>${categoryBadgeHTML(e.category)}</td>
+                    <td style="white-space:nowrap;">${formatDateShort(e.date)}</td>
+                    <td>${formatCurrency(e.price)}</td>
+                    <td>
+                        <div style="margin-bottom:0.3rem; font-size:0.85rem;">${e.soldTickets} / ${e.totalTickets} <span style="color:var(--text-muted);">(${pct}%)</span></div>
+                        <div class="availability-bar" style="width:120px;">
+                            <div class="availability-fill ${pct >= 90 ? 'low' : ''}" style="width:${pct}%;"></div>
+                        </div>
+                    </td>
+                    <td>
+                        <button class="btn btn-danger btn-sm" onclick="handleDeleteEvent('${e.id}', '${e.title.replace(/'/g, "\\'")}')">Delete</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderBookingsTable(bookings) {
+        const tbody = document.getElementById('admin-bookings-tbody');
+        if (!bookings.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:2rem; color:var(--text-muted);">No bookings yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = bookings.map(b => `
+            <tr>
+                <td style="font-family:monospace; font-size:0.8rem;">${b.bookingId}</td>
+                <td>
+                    <div style="font-weight:600; max-width:180px;">${b.eventTitle}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">${formatDateShort(b.eventDate)}</div>
+                </td>
+                <td>
+                    <div style="font-weight:500;">${b.purchaser?.name || 'N/A'}</div>
+                    <div style="font-size:0.75rem; color:var(--text-muted);">${b.purchaser?.email || ''}</div>
+                </td>
+                <td style="text-align:center; font-weight:600;">${b.quantity}</td>
+                <td style="color:var(--success); font-weight:600;">${formatCurrency(b.totalPaid)}</td>
+                <td style="font-size:0.8rem; color:var(--text-muted); white-space:nowrap;">
+                    ${b.purchasedAt ? new Date(b.purchasedAt).toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) : '—'}
+                </td>
+            </tr>
+        `).join('');
+    }
+
+
+    // =====================================================================
+    // CREATE EVENT
+    // =====================================================================
+    async function handleCreateEvent(e) {
+        e.preventDefault();
+        const btn = document.getElementById('create-btn');
+        setButtonLoading(btn, true);
+
+        const eventData = {
+            id:            document.getElementById('ev-id').value.trim(),
+            title:         document.getElementById('ev-title').value.trim(),
+            category:      document.getElementById('ev-category').value,
+            date:          document.getElementById('ev-date').value,
+            time:          document.getElementById('ev-time').value.trim(),
+            location:      document.getElementById('ev-loc').value.trim(),
+            price:         parseFloat(document.getElementById('ev-price').value),
+            total_tickets: parseInt(document.getElementById('ev-tickets').value),
+            image:         document.getElementById('ev-image').value.trim(),
+            description:   document.getElementById('ev-desc').value.trim()
+        };
+
+        const result = await createEvent(eventData);
+        setButtonLoading(btn, false);
+
+        if (result.success) {
+            toast(`Event "${eventData.title}" created!`, 'success');
+            document.getElementById('create-event-form').reset();
+            await loadAdminData();
+        } else {
+            toast(result.error || 'Failed to create event', 'error');
+        }
+    }
+
+
+    // =====================================================================
+    // DELETE EVENT
+    // =====================================================================
+    async function handleDeleteEvent(id, title) {
+        // Simple confirm dialog — in production you'd use a custom modal
+        if (!confirm(`Delete "${title}"?\n\nThis action cannot be undone.`)) return;
+
+        const result = await deleteEvent(id);
+        if (result.success) {
+            toast(`Event "${title}" deleted.`, 'info');
+            await loadAdminData();
+        } else {
+            toast(result.error || 'Failed to delete event', 'error');
+        }
+    }
+    </script>
+</body>
+</html>

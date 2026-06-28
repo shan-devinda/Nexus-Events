@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tickets | Nexus Events</title>
+    <meta name="description" content="View and manage your event tickets on Nexus Events.">
+    <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+    <div class="bg-glow"></div>
+
+    <!-- HEADER -->
+    <header>
+        <a href="index.html" class="logo">⚡ Nexus Events</a>
+        <div class="nav-center">
+            <nav>
+                <a href="index.html">Catalog</a>
+                <a href="dashboard.html" class="active">My Tickets</a>
+            </nav>
+        </div>
+        <div class="nav-right" id="nav-right"></div>
+    </header>
+
+    <main>
+        <div class="tickets-header">
+            <h1>My Tickets</h1>
+            <a href="index.html" class="btn btn-secondary">Browse More Events</a>
+        </div>
+
+        <div id="tickets-container">
+            <div style="display:flex; justify-content:center; padding:4rem;">
+                <div class="loader loader-lg"></div>
+            </div>
+        </div>
+    </main>
+
+    <script src="scripts/data.js"></script>
+    <script src="scripts/app.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            renderNav();
+
+            const container = document.getElementById('tickets-container');
+            const user = getCurrentUser();
+
+            if (!user) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size:3rem; margin-bottom:1rem;">🎟️</div>
+                        <h2>Not Logged In</h2>
+                        <p>Please log in to view your tickets.</p>
+                        <a href="index.html" class="btn btn-primary" style="margin-top:1.5rem;">Go to Catalog &amp; Log In</a>
+                    </div>
+                `;
+                return;
+            }
+
+            // Handle Stripe success redirect
+            const params    = new URLSearchParams(window.location.search);
+            const sessionId = params.get('session_id');
+            const bookingId = params.get('booking_id');  // dev mode
+            const devMode   = params.get('dev') === '1';
+
+            if (sessionId || bookingId) {
+                window.history.replaceState({}, '', 'dashboard.html');
+            }
+
+            if (sessionId) {
+                try {
+                    const res = await fetch('http://127.0.0.1:5000/api/complete-booking', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            ...getAuthHeaders()
+                        },
+                        body: JSON.stringify({ session_id: sessionId })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        toast('🎉 Payment confirmed! Your ticket is booked.', 'success', 6000);
+                    } else {
+                        toast('Payment verification failed: ' + (data.error || 'Unknown error'), 'error', 8000);
+                    }
+                } catch (e) {
+                    console.error(e);
+                    toast('Could not verify payment with server.', 'error');
+                }
+            }
+
+            if (devMode && bookingId) {
+                toast('🎉 Booking confirmed! (Dev mode — no real payment)', 'success', 6000);
+            }
+
+            await loadTickets(container);
+        });
+
+        async function loadTickets(container) {
+            const result = await getUserTickets();
+
+            // Handle error objects vs arrays
+            if (result && result.error) {
+                if (result.error === 'unauthorized') {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <div style="font-size:3rem; margin-bottom:1rem;">🔒</div>
+                            <h2>Session Expired</h2>
+                            <p>Your session has expired. Please log in again.</p>
+                            <a href="index.html" class="btn btn-primary" style="margin-top:1.5rem;">Go to Catalog</a>
+                        </div>
+                    `;
+                } else {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <h2>Could Not Load Tickets</h2>
+                            <p>Make sure the backend server is running, then refresh.</p>
+                            <button class="btn btn-secondary" style="margin-top:1.5rem;" onclick="location.reload()">Refresh</button>
+                        </div>
+                    `;
+                }
+                return;
+            }
+
+            const tickets = Array.isArray(result) ? result : [];
+
+            if (tickets.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div style="font-size:3rem; margin-bottom:1rem;">🎟️</div>
+                        <h2>No tickets yet</h2>
+                        <p>You haven't booked any events. Start exploring!</p>
+                        <a href="index.html" class="btn btn-primary" style="margin-top:1.5rem;">Browse Events</a>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = '';
+            tickets.forEach(ticket => {
+                const upcoming = isUpcoming(ticket.eventDate);
+                const qrCells  = Array.from({ length: 25 }, () =>
+                    `<div class="qr-cell" style="opacity:${Math.random() > 0.35 ? 1 : 0}"></div>`
+                ).join('');
+
+                const el = document.createElement('div');
+                el.className = 'ticket-stub';
+                el.innerHTML = `
+                    <div class="ticket-main">
+                        ${ticket.eventImage
+                            ? `<img src="${ticket.eventImage}" alt="${ticket.eventTitle}" class="ticket-event-img" loading="lazy">`
+                            : `<div class="ticket-event-img" style="background:var(--bg-surface-2);display:flex;align-items:center;justify-content:center;font-size:1.5rem;">🎟️</div>`
+                        }
+                        <div class="ticket-info">
+                            <div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:0.35rem; flex-wrap:wrap;">
+                                <span class="ticket-status-badge ${upcoming ? 'status-upcoming' : 'status-past'}">
+                                    ${upcoming ? '● Upcoming' : '✓ Attended'}
+                                </span>
+                                ${categoryBadgeHTML(ticket.eventCategory)}
+                            </div>
+                            <div class="ticket-event-name">${ticket.eventTitle}</div>
+                            <div class="ticket-event-date">${formatDate(ticket.eventDate)}</div>
+                            <div class="event-meta" style="font-size:0.82rem; margin-bottom:1rem;">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                                ${ticket.eventLocation || ''}
+                            </div>
+                            <div class="ticket-meta-grid">
+                                <div class="ticket-meta-item">
+                                    <div class="label">Ticket Holder</div>
+                                    <div class="value">${ticket.purchaser?.name || 'N/A'}</div>
+                                </div>
+                                <div class="ticket-meta-item">
+                                    <div class="label">Quantity</div>
+                                    <div class="value">${ticket.quantity} × General</div>
+                                </div>
+                                <div class="ticket-meta-item">
+                                    <div class="label">Total Paid</div>
+                                    <div class="value" style="color:var(--success)">${formatCurrency(ticket.totalPaid)}</div>
+                                </div>
+                            </div>
+                            <div style="margin-top:1rem; font-size:0.72rem; color:var(--text-muted); font-family:monospace;">
+                                ${ticket.bookingId}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="ticket-perforation"></div>
+                    <div class="ticket-qr">
+                        <div class="qr-mock">${qrCells}</div>
+                        <div class="ticket-id-label">${ticket.bookingId}</div>
+                    </div>
+                `;
+                container.appendChild(el);
+            });
+        }
+    </script>
+</body>
+</html>
